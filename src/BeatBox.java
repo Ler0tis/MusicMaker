@@ -136,44 +136,60 @@ public class BeatBox {
         }
     }
 
-            public class MyStartListener implements ActionListener {
-                public void actionPerformed(ActionEvent a) {
-                    // buildTrackAndStart();
-                }
-            }
+    public class MyStartListener implements ActionListener {
+        public void actionPerformed(ActionEvent a) {
+            buildTrackAndStart();
+        }
+    }
 
-            public class MyStopListener implements ActionListener {
-                public void actionPerformed(ActionEvent a) {
+    public class MyStopListener implements ActionListener {
+        public void actionPerformed(ActionEvent a) {
+            sequencer.stop();
 
-                }
-            }
+        }
+    }
 
-            public class MyUpTempoListener implements ActionListener {
-                public void actionPerformed(ActionEvent a) {
+    // tempoFactor scales sequencer's tempo bij the factor provided
+    public class MyUpTempoListener implements ActionListener {
+        public void actionPerformed(ActionEvent a) {
+            float tempoFactor = sequencer.getTempoFactor();
+            sequencer.setTempoFactor((float) (tempoFactor * 1.03));
 
-                }
-            }
+        }
+    }
 
-            public class MyDownTempoListener implements ActionListener {
-                public void actionPerformed(ActionEvent a) {
+    public class MyDownTempoListener implements ActionListener {
+        public void actionPerformed(ActionEvent a) {
+            float tempoFactor = sequencer.getTempoFactor();
+            sequencer.setTempoFactor((float) (tempoFactor * .97));
 
-                }
-            }
 
-            public void makeTracks(int[] list) {
+        }
+    }
 
-            }
 
-            public MidiEvent makeEvent(int comd, int chan, int one, int two, int tick) {
-        MidiEvent event = null;
-        try {
-            ShortMessage a = new ShortMessage();
-            a.setMessage(comd, chan, one, two);
-            event = new MidiEvent(a, tick);
+    public void makeTracks(int[] list) {
 
-        } catch(Exception e) {e.printStackTrace();}
-        return event;
+        for (int i = 0; i < 16; i++) {
+            int key = list[i];
 
+            if (key != 0) {
+                track.add(makeEvent(144, 9, key, 100, i));
+                track.add(makeEvent(128, 9, key, 100, i + 1));
             }
         }
+    }
+
+        public MidiEvent makeEvent ( int comd, int chan, int one, int two, int tick){
+            MidiEvent event = null;
+            try {
+                ShortMessage a = new ShortMessage();
+                a.setMessage(comd, chan, one, two);
+                event = new MidiEvent(a, tick);
+
+            } catch (Exception e) { e.printStackTrace(); }
+            return event;
+
+        }
+    }
 
