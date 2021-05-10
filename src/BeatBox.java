@@ -1,10 +1,11 @@
 
 import javax.sound.midi.*;
 import javax.swing.*;
-import javax.swing.border.Border;
+import javax.swing.event.*;
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
 import java.util.*;
+import java.net.*;
 import java.awt.event.*;
 import java.awt.*;
 import java.io.*;
@@ -14,12 +15,22 @@ import java.io.*;
 
 public class BeatBox {
 
+    JFrame theFrame;
     JPanel mainPanel;
+    JList incomingList;
+    JTextField userMessage;
     ArrayList<JCheckBox> checkboxList;
+    int nextNum;
+    Vector<String> listVector = new Vector<String>();
+    String userName;
+    ObjectOutputStream out;
+    ObjectInputStream in;
+    HashMap<String, boolean[]> otherSeqsMap = new HashMap<String, boolean[]>();
+
     Sequencer sequencer;
     Sequence sequence;
     Track track;
-    JFrame theFrame;
+
 
     String[] instrumentNames = {"Bass Drum", "Closed Hi-Hat", "Open Hi-Hat", "Acoustic Snare", "Crash Cymbal",
             "Hand Clap", "High Tom", "Hi Bongo", "Maracas", "Whistle", "Low Conga", "Cowbell", "Vibraslap",
@@ -29,8 +40,25 @@ public class BeatBox {
 
 
     public static void main(String[] args) {
-        new BeatBox().buildGUI();
+        new BeatBox().startUp(args[0]);
     }
+
+    public void startUp(String name) {
+        userName = name;
+        // open connection to server
+        try {
+            Socket sock = new Socket("127.0.0.1", 4242);
+            out = new ObjectOutputStream(sock.getOutputStream());
+            in = new ObjectInputStream(sock.getInputStream());
+            Thread remote = new Thread(new RemoteReader());
+            remote.start();
+        } catch(Exception ex) {
+            System.out.println("coudln't connect - you'll have to play alone");
+        }
+        setUpMidi();
+        buildGUI();
+    }
+
 
     public void buildGUI() {
         theFrame = new JFrame("Digital BeatBox");
@@ -40,8 +68,8 @@ public class BeatBox {
         background.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         checkboxList = new ArrayList<JCheckBox>();
-        Box buttonBox = new Box(BoxLayout.Y_AXIS);
 
+        Box buttonBox = new Box(BoxLayout.Y_AXIS);
         JButton start = new JButton("Start");
         start.addActionListener(new MyStartListener());
         buttonBox.add(start);
@@ -58,6 +86,22 @@ public class BeatBox {
         downTempo.addActionListener(new MyDownTempoListener());
         buttonBox.add(downTempo);
 
+        JButton sendIt = new JButton("sendIt");
+        sendIt.addActionListener(new MySendListener());
+        buttonBox.add(sendIt);
+
+        userMessage = new JTextField();
+        buttonBox.add(userMessage);
+
+
+        incomingList = new JList();
+        incomingList.addListSelectionListener(new MyListSelectionListener());
+        incomingList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane theList = new JScrollPane(incomingList);
+        buttonBox.add(theList);
+        incomingList.setListData(listVector);
+
+
         Box nameBox = new Box(BoxLayout.Y_AXIS);
         for (int i = 0; i < 16; i++) {
             nameBox.add(new Label(instrumentNames[i]));
@@ -67,7 +111,6 @@ public class BeatBox {
         background.add(BorderLayout.WEST, nameBox);
 
         theFrame.getContentPane().add(background);
-
         //  GRID of music maker
         GridLayout grid = new GridLayout(16, 16);
         grid.setVgap(1);
@@ -83,13 +126,12 @@ public class BeatBox {
             mainPanel.add(c);
         }
 
-        setUpMidi();
-
         theFrame.setBounds(50, 50, 300, 300);
         theFrame.pack();
         theFrame.setVisible(true);
 
     }
+
 
     public void setUpMidi() {
         try {
@@ -103,41 +145,37 @@ public class BeatBox {
         }
     }
 
-    public void buildTrackAndStart() {
-        int[] trackList = null;
 
+    public void buildTrackAndStart() {
+        ArrayList<Integer> trackList = null;
         sequence.deleteTrack(track);
         track = sequence.createTrack();
 
         for (int i = 0; i < 16; i++) {
-            trackList = new int[16];
 
-            int key = instruments[i];
+            trackList = new ArrayList<Integer>();
 
             for (int j = 0; j < 16; j++) {
-
                 JCheckBox jc = checkboxList.get(j + 16 * i);
                 if (jc.isSelected()) {
-                    trackList[j] = key;
+                    int key = instruments[i];
+                    trackList.add(new Integer(key));
                 } else {
-                    trackList[j] = 0;
+                    trackList.add(null);
                 }
-
-                makeTracks(trackList);
-                track.add(makeEvent(176, 1, 127, 0, 16));
             }
-
-            track.add(makeEvent(192, 9, 1, 0, 15));
-            try {
-                sequencer.setSequence(sequence);
-                sequencer.setLoopCount(sequencer.LOOP_CONTINUOUSLY);
-                sequencer.start();
-                sequencer.setTempoInBPM(120);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            makeTracks(trackList);
         }
+        track.add(makeEvent(192, 9, 1, 0, 15));
+
+        try {
+            sequencer.setSequence(sequence);
+            sequencer.setLoopCount(sequencer.LOOP_CONTINUOUSLY);
+            sequencer.start();
+            sequencer.setTempoInBPM(120);
+        } catch (Exception e) { e.printStackTrace(); }
     }
+
 
     public class MyStartListener implements ActionListener {
         public void actionPerformed(ActionEvent a) {
@@ -145,12 +183,14 @@ public class BeatBox {
         }
     }
 
+
     public class MyStopListener implements ActionListener {
         public void actionPerformed(ActionEvent a) {
             sequencer.stop();
 
         }
     }
+
 
     // tempoFactor scales sequencer's tempo bij the factor provided
     public class MyUpTempoListener implements ActionListener {
@@ -161,17 +201,16 @@ public class BeatBox {
         }
     }
 
+
     public class MyDownTempoListener implements ActionListener {
         public void actionPerformed(ActionEvent a) {
             float tempoFactor = sequencer.getTempoFactor();
             sequencer.setTempoFactor((float) (tempoFactor * .97));
-
-
         }
     }
 
 
-    public void makeTracks(int[] list) {
+    public void makeTracks(ArrayList<Integer> list) {
 
         for (int i = 0; i < 16; i++) {
             int key = list[i];
@@ -196,19 +235,15 @@ public class BeatBox {
         }
 
         public class MySendListener implements ActionListener {
-
         public void actionPerformed(ActionEvent a) {
-
             boolean[] checkboxState = new boolean[256];
-
             for (int i = 0; i < 256; i++) {
-
                 JCheckBox check = (JCheckBox) checkboxList.get(i);
                 if (check.isSelected()) {
                     checkboxState[i] = true;
                 }
             }
-
+            String messageToSend = null;
             try {
                 FileOutputStream fileStream = new FileOutputStream(new File("Checkbox.ser"));
                 ObjectOutputStream os = new ObjectOutputStream(fileStream);
@@ -220,27 +255,13 @@ public class BeatBox {
         }
         }
 
-        public class MyReadInListener implements ActionListener {
 
-        public void actionPerformed(ActionEvent a) {
-            boolean[] checkboxState = null;
-            try {
-                FileInputStream fileIn = new FileInputStream(new File("Checkbox.ser"));
-                ObjectInputStream is = new ObjectInputStream(fileIn);
-                checkboxState = (boolean[]) is.readObject();
-            } catch (Exception ex) {ex.printStackTrace(); }
-
-            for (int i = 0; i < 256; i++) {
-                JCheckBox check = (JCheckBox) checkboxList.get(i);
-                if (checkboxState[i]) {
-                    check.setSelected(true);
-                } else {
-                    check.setSelected(false);
-                }
+        public class MyReadInListener implements ListSelectionListener {
+        public void valueChanged(ListSelectionEvent le) {
+            if (!le.getValueIsAdjusting()) {
+                String sleected = (String) incomingList.getSelectedValue();
             }
 
-            sequencer.stop();
-            buildTrackAndStart();
         }
 
 
