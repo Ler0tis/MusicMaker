@@ -210,29 +210,6 @@ public class BeatBox {
     }
 
 
-    public void makeTracks(ArrayList<Integer> list) {
-
-        for (int i = 0; i < 16; i++) {
-            int key = list[i];
-
-            if (key != 0) {
-                track.add(makeEvent(144, 9, key, 100, i));
-                track.add(makeEvent(128, 9, key, 100, i + 1));
-            }
-        }
-    }
-
-        public MidiEvent makeEvent ( int comd, int chan, int one, int two, int tick){
-            MidiEvent event = null;
-            try {
-                ShortMessage a = new ShortMessage();
-                a.setMessage(comd, chan, one, two);
-                event = new MidiEvent(a, tick);
-
-            } catch (Exception e) { e.printStackTrace(); }
-            return event;
-
-        }
 
         public class MySendListener implements ActionListener {
         public void actionPerformed(ActionEvent a) {
@@ -245,12 +222,12 @@ public class BeatBox {
             }
             String messageToSend = null;
             try {
-                FileOutputStream fileStream = new FileOutputStream(new File("Checkbox.ser"));
-                ObjectOutputStream os = new ObjectOutputStream(fileStream);
-                os.writeObject(checkboxState);
+                out.writeObject(userName + nextNum++ + ": " + userMessage.getText());
+                out.writeObject(checkboxState);
             } catch(Exception ex) {
-                ex.printStackTrace();
+                System.out.println("Sorry. Could not send it to the server");
             }
+            userMessage.setText("");
 
         }
         }
@@ -259,12 +236,78 @@ public class BeatBox {
         public class MyReadInListener implements ListSelectionListener {
         public void valueChanged(ListSelectionEvent le) {
             if (!le.getValueIsAdjusting()) {
-                String sleected = (String) incomingList.getSelectedValue();
+                String selected = (String) incomingList.getSelectedValue();
+                if (selected != null) {
+                    boolean[] selectedState = (boolean[]) otherSeqsMap.get(selected);
+                    changeSequence(selectedState);
+                    sequencer.stop();
+                    buildTrackAndStart();
+                }
+            }
+
+        }
+        }
+
+        public class RemoteReader implements Runnable {
+            boolean[] checkboxState = null;
+            String nameToShow = null;
+            Object obj = null;
+            public void run() {
+                try {
+                    while((obj=in.readObject()) != null) {
+                        System.out.println("got a object from the server");
+                        System.out.println(obj.getClass());
+                        String nameToShow = (String) obj;
+                        checkboxState = (boolean[]) in.readObject();
+                        otherSeqsMap.put(nameToShow, checkboxState);
+                        listVector.add(nameToShow);
+                        incomingList.setListData(listVector);
+                    }
+                } catch(Exception ex) {ex.printStackTrace();}
             }
 
         }
 
 
+        public class MyPlayMineListener implements ActionListener {
+        public void actionPerformed(ActionEvent a) {
+            if (mySequence != null) {
+                sequence = mySequence;
+            }
+        }
+        }
+
+        public void changeSequence(boolean[] checkBoxState) {
+        for (int i = 0; i < 256; i++) {
+            JCheckBox check = (JCheckBox) checkboxList.get(i);
+            if (checkBoxState[i]) {
+                check.setSelected(true);
+            } else {
+                check.setSelected(false);
+            }
+        }
+        }
+
+        public void makeTracks(ArrayList list) {
+        Iterator it = list.iterator();
+        for (int i = 0; i < 16; i++) {
+            Integer num = (Integer) it.next();
+            if (num != null) {
+                int numKey = num.intValue();
+                track.add(makeEvent(144,9, numKey, 100, i));
+                track.add(makeEvent(128, 9,numKey, 100, i + 1));
+            }
+        }
+        }
+
+        public MidiEvent makeEvent(int comd, int chan, int one, int two, int tick) {
+            MidiEvent event = null;
+            try {
+                ShortMessage a = new ShortMessage();
+                a.setMessage(comd, chan, one, two);
+                event = new MidiEvent(a, tick);
+            } catch(Exception e) {}
+            return event;
         }
 
     }
